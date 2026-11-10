@@ -162,6 +162,24 @@ export const usePlayer = create<PlayerState>((set, get) => {
     const track = s.queue[index];
     if (!track) return;
 
+    if (capabilities.radioPlayback) {
+      token++;
+      activeMedia()?.pause();
+      loaded = null;
+      set({ index, mediaKind: "audio", status: "loading", statusText: null, videoNote: null, position: 0, duration: track.duration, buffered: 0 });
+      setMetadata(track);
+      const mine = token;
+      void api.peachPlay(track).then(
+        () => {
+          if (mine !== token) return;
+          set({ status: "playing", statusText: null });
+          onStarted();
+        },
+        (error: Error) => mine === token && report(error.message),
+      );
+      return;
+    }
+
     // Video mode on a song: find its music video first, then load whichever fits.
     if (needsClipLookup(track, s.preferVideo)) {
       const mine = ++token;
@@ -427,6 +445,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
         queue: [...s.queue.slice(0, insert), track, ...s.queue.slice(insert)],
         original: s.original ? [...s.original, track] : null,
       });
+      if (capabilities.radioPlayback) void api.peachEnqueue(track).catch((error: Error) => toast(error.message, "error"));
       toast(getT().player.playsNext(track.title));
     },
 
@@ -434,6 +453,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
       const s = get();
       if (!s.queue.length) return get().playList([track]);
       set({ queue: [...s.queue, track], original: s.original ? [...s.original, track] : null });
+      if (capabilities.radioPlayback) void api.peachEnqueue(track).catch((error: Error) => toast(error.message, "error"));
       toast(getT().player.addedToQueue(track.title));
     },
 
@@ -477,6 +497,15 @@ export const usePlayer = create<PlayerState>((set, get) => {
       const s = get();
       const track = s.queue[s.index];
       if (!track) return;
+      if (capabilities.radioPlayback) {
+        const action = s.status === "playing" ? "pause" : "resume";
+        set({ status: action === "pause" ? "paused" : "loading" });
+        void api.peachControl(action).then(
+          () => set({ status: action === "pause" ? "paused" : "playing" }),
+          (error: Error) => report(error.message),
+        );
+        return;
+      }
       const kind = kindFor(track);
       const stale =
         !loaded ||
@@ -492,6 +521,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
 
     next: () => {
       const s = get();
+      if (capabilities.radioPlayback) {
+        void api.peachControl("skip").catch((error: Error) => report(error.message));
+        if (s.index < s.queue.length - 1) set({ index: s.index + 1, status: "playing", position: 0, duration: s.queue[s.index + 1].duration });
+        return;
+      }
       if (s.index < s.queue.length - 1) return load(s.index + 1);
       if (s.repeat === "all" && s.queue.length) return load(0);
       if (s.autoRadio) void continueWithRadio();
@@ -504,6 +538,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     },
 
     seek: (seconds) => {
+      if (capabilities.radioPlayback) return;
       const t = Math.max(0, Math.min(seconds, get().duration || seconds));
       set({ position: t });
       const media = activeMedia();
@@ -521,6 +556,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
       const muted = volume === 0 ? true : false;
       audio.muted = videoEl.muted = muted;
       set({ volume, muted });
+      if (capabilities.radioPlayback) void api.peachControl("volume", Math.round(volume * 100)).catch(() => {});
     },
 
     toggleMute: () => {

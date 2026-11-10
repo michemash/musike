@@ -55,6 +55,16 @@ export interface Prepared {
   hasSdVideo: boolean;
 }
 
+export interface PeachState {
+  broadcasting: boolean;
+  current: { id: string; title: string; artist: string; duration: number; thumb: string } | null;
+  queue: Array<{ id: string; title: string; artist: string; duration: number; thumb: string }>;
+  paused: boolean;
+  volume: number;
+  publicUrl: string;
+  activeSource?: string;
+}
+
 /**
  * The operating system's media controls (notification, lock screen, headphone buttons) when the browser's
  * Media Session can't reach them: the Android app. Absent elsewhere.
@@ -78,6 +88,9 @@ export interface MusikeApi {
   /** The music video matching a song, or null when YouTube has none. */
   videoFor(t: Track): Promise<Track | null>;
   prepare(id: string, signal?: AbortSignal): Promise<Prepared>;
+  peachPlay(t: Track): Promise<PeachState>;
+  peachEnqueue(t: Track): Promise<PeachState>;
+  peachControl(action: "pause" | "resume" | "skip" | "stop" | "state" | "volume", percent?: number): Promise<PeachState>;
 
   library(): Promise<Library>;
   addFavorite(t: Track): Promise<{ favorites: Track[] }>;

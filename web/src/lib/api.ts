@@ -5,6 +5,7 @@ import {
   type ErrorCode,
   type ImportResult,
   type MusikeApi,
+  type PeachState,
   type Prepared,
   type SystemInfo,
   type SystemJob,
@@ -59,6 +60,9 @@ export const api: MusikeApi = {
       method: "POST",
       signal,
     }),
+  peachPlay: (track: Track) => request<PeachState>("/api/peach/play", { method: "POST", json: track }),
+  peachEnqueue: (track: Track) => request<PeachState>("/api/peach/enqueue", { method: "POST", json: track }),
+  peachControl: (action, percent) => request<PeachState>("/api/peach/control", { method: "POST", json: { action, percent } }),
 
   library: () => request<Library>("/api/library"),
   addFavorite: (t: Track) => request<{ favorites: Track[] }>(`/api/favorites/${t.id}`, { method: "PUT", json: t }),
@@ -83,6 +87,7 @@ export const api: MusikeApi = {
 
 /** What a media element plays for a track: here, the server's stream proxy. The Android backend resolves it on the phone. */
 const hostedPlayback = import.meta.env.VITE_HOSTED_PLAYBACK === "youtube";
+const radioPlayback = import.meta.env.VITE_PEACH_RADIO === "true";
 
 export const streamSource = (id: string, kind: "audio" | "video", quality: "sd" | "hd"): string | Promise<string> =>
   hostedPlayback ? `youtube:${id}` : kind === "audio" ? `/api/stream/${id}/audio` : `/api/stream/${id}/video?q=${quality}`;
@@ -119,7 +124,8 @@ export const systemMedia: SystemMedia | null = null;
 /** What this build can do. The Android build has no video yet, no yt-dlp to manage, and retries expired streams. */
 export const capabilities = {
   video: !hostedPlayback,
-  embeddedPlayback: hostedPlayback,
+  embeddedPlayback: hostedPlayback && !radioPlayback,
+  radioPlayback,
   engineSettings: !hostedPlayback,
   retryOnError: false,
   downloads: !hostedPlayback,
