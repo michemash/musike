@@ -90,7 +90,11 @@ export interface MusikeApi {
   prepare(id: string, signal?: AbortSignal): Promise<Prepared>;
   peachPlay(t: Track): Promise<PeachState>;
   peachEnqueue(t: Track): Promise<PeachState>;
-  peachControl(action: "pause" | "resume" | "skip" | "stop" | "state" | "volume", percent?: number): Promise<PeachState>;
+  peachEnqueueNext(t: Track): Promise<PeachState>;
+  peachControl(
+    action: "pause" | "resume" | "skip" | "stop" | "state" | "volume" | "remove" | "clear" | "jump",
+    value?: number,
+  ): Promise<PeachState>;
 
   library(): Promise<Library>;
   addFavorite(t: Track): Promise<{ favorites: Track[] }>;

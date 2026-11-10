@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { getT, useT } from "../i18n";
-import { api, capabilities, explainStreamError, streamSource, systemMedia, type ApiError, type ErrorCode } from "../lib/api";
+import { api, capabilities, explainStreamError, streamSource, systemMedia, type ApiError, type ErrorCode, type PeachState } from "../lib/api";
 import { createAudio } from "../lib/audio";
 import { shuffled } from "../lib/format";
 import type { Track } from "../lib/types";
@@ -166,14 +166,23 @@ export const usePlayer = create<PlayerState>((set, get) => {
       token++;
       activeMedia()?.pause();
       loaded = null;
-      set({ index, mediaKind: "audio", status: "loading", statusText: null, videoNote: null, position: 0, duration: track.duration, buffered: 0 });
+      set({
+        index,
+        mediaKind: "audio",
+        status: "loading",
+        statusText: null,
+        videoNote: null,
+        position: 0,
+        duration: track.duration,
+        buffered: 0,
+      });
       setMetadata(track);
       const mine = token;
       const stationTrack = track.kind === "song" ? api.videoFor(track).then((video) => video ?? track) : Promise.resolve(track);
       void stationTrack.then((resolved) => api.peachPlay(resolved)).then(
-        () => {
+        (state) => {
           if (mine !== token) return;
-          set({ status: "playing", statusText: null });
+          applyPeachState(state);
           onStarted();
         },
         (error: Error) => mine === token && report(error.message),
@@ -441,26 +450,39 @@ export const usePlayer = create<PlayerState>((set, get) => {
     playNext: (track) => {
       const s = get();
       if (!s.queue.length) return get().playList([track]);
+      if (capabilities.radioPlayback) {
+        void api.peachEnqueueNext(track).then(applyPeachState, (error: Error) => toast(error.message, "error"));
+        toast(getT().player.playsNext(track.title));
+        return;
+      }
       const insert = s.index + 1;
       set({
         queue: [...s.queue.slice(0, insert), track, ...s.queue.slice(insert)],
         original: s.original ? [...s.original, track] : null,
       });
-      if (capabilities.radioPlayback) void api.peachEnqueue(track).catch((error: Error) => toast(error.message, "error"));
       toast(getT().player.playsNext(track.title));
     },
 
     addToQueue: (track) => {
       const s = get();
       if (!s.queue.length) return get().playList([track]);
+      if (capabilities.radioPlayback) {
+        void api.peachEnqueue(track).then(applyPeachState, (error: Error) => toast(error.message, "error"));
+        toast(getT().player.addedToQueue(track.title));
+        return;
+      }
       set({ queue: [...s.queue, track], original: s.original ? [...s.original, track] : null });
-      if (capabilities.radioPlayback) void api.peachEnqueue(track).catch((error: Error) => toast(error.message, "error"));
       toast(getT().player.addedToQueue(track.title));
     },
 
     removeAt: (i) => {
       const s = get();
       if (i < 0 || i >= s.queue.length) return;
+      if (capabilities.radioPlayback) {
+        if (i === s.index) return;
+        void api.peachControl("remove", i - s.index - 1).then(applyPeachState, (error: Error) => toast(error.message, "error"));
+        return;
+      }
       const removed = s.queue[i];
       const queue = s.queue.filter((_, j) => j !== i);
       const original = s.original?.filter((t) => t !== removed) ?? null;
@@ -476,10 +498,21 @@ export const usePlayer = create<PlayerState>((set, get) => {
       }
     },
 
-    jumpTo: (i) => load(i),
+    jumpTo: (i) => {
+      const s = get();
+      if (capabilities.radioPlayback && i !== s.index) {
+        void api.peachControl("jump", i - s.index - 1).then(applyPeachState, (error: Error) => toast(error.message, "error"));
+        return;
+      }
+      load(i);
+    },
 
     clearUpcoming: () => {
       const s = get();
+      if (capabilities.radioPlayback) {
+        void api.peachControl("clear").then(applyPeachState, (error: Error) => toast(error.message, "error"));
+        return;
+      }
       const keep = s.queue.slice(0, s.index + 1);
       set({ queue: keep, original: s.original ? keep.slice() : null });
     },
@@ -502,7 +535,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
         const action = s.status === "playing" ? "pause" : "resume";
         set({ status: action === "pause" ? "paused" : "loading" });
         void api.peachControl(action).then(
-          () => set({ status: action === "pause" ? "paused" : "playing" }),
+          applyPeachState,
           (error: Error) => report(error.message),
         );
         return;
@@ -523,8 +556,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     next: () => {
       const s = get();
       if (capabilities.radioPlayback) {
-        void api.peachControl("skip").catch((error: Error) => report(error.message));
-        if (s.index < s.queue.length - 1) set({ index: s.index + 1, status: "playing", position: 0, duration: s.queue[s.index + 1].duration });
+        void api.peachControl("skip").then(applyPeachState, (error: Error) => report(error.message));
         return;
       }
       if (s.index < s.queue.length - 1) return load(s.index + 1);
@@ -606,6 +638,46 @@ audio.volume = videoEl.volume = usePlayer.getState().volume;
 audio.muted = videoEl.muted = usePlayer.getState().muted;
 
 export const selectCurrent = (s: PlayerState): Track | null => s.queue[s.index] ?? null;
+
+function peachTrack(item: NonNullable<PeachState["current"]>, existing: Track[]): Track {
+  const known = existing.find((track) => track.id === item.id);
+  return known ?? {
+    ...item,
+    art: item.thumb.replace("mqdefault", "hq720"),
+    kind: "video",
+  };
+}
+
+/** Replaces the browser's optimistic queue with the radio worker's authoritative shared queue. */
+function applyPeachState(state: PeachState) {
+  const previous = usePlayer.getState();
+  const items = state.current ? [state.current, ...state.queue] : state.queue;
+  const queue = items.map((item) => peachTrack(item, previous.queue));
+  const currentChanged = (state.current?.id ?? null) !== (previous.queue[previous.index]?.id ?? null);
+  usePlayer.setState({
+    queue,
+    original: null,
+    index: 0,
+    status: state.current ? (state.paused ? "paused" : "playing") : "idle",
+    statusText: null,
+    position: currentChanged ? 0 : previous.position,
+    duration: state.current?.duration ?? 0,
+    buffered: 0,
+    volume: state.volume,
+    muted: state.volume === 0,
+    shuffle: false,
+  });
+  if (state.current) setMetadata(peachTrack(state.current, previous.queue));
+}
+
+if (capabilities.radioPlayback) {
+  const refreshSharedQueue = () => {
+    if (document.visibilityState !== "hidden") void api.peachControl("state").then(applyPeachState).catch(() => {});
+  };
+  refreshSharedQueue();
+  setInterval(refreshSharedQueue, 2500);
+  document.addEventListener("visibilitychange", refreshSharedQueue);
+}
 
 /** Whether the track can be shown as video (art tracks are audio with a still image). */
 

@@ -12,6 +12,7 @@ import {
   type SystemMedia,
 } from "./apiTypes";
 import type { AlbumCard, AlbumPage, ArtistPage, Genre, GenreArtist, GenrePage, Library, Playlist, Track } from "./types";
+import { peachAdminToken } from "./adminAccess";
 
 // The HTTP backend: the Musike server (web app, desktop app). The Android build swaps this module for native/api.ts.
 export * from "./apiTypes";
@@ -21,11 +22,13 @@ const LANG_HEADER = "x-musike-lang";
 
 async function request<T>(path: string, init?: RequestInit & { json?: unknown }): Promise<T> {
   const { json, ...rest } = init ?? {};
+  const adminPath = /^\/api\/(?:peach|library|favorites|playlists|history)(?:\/|$)/.test(path);
   const res = await fetch(path, {
     ...rest,
     headers: {
       [LANG_HEADER]: getLang(),
       ...(json !== undefined ? { "content-type": "application/json" } : {}),
+      ...(adminPath && peachAdminToken ? { authorization: `Bearer ${peachAdminToken}` } : {}),
       ...(rest.headers as Record<string, string> | undefined),
     },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
@@ -62,7 +65,12 @@ export const api: MusikeApi = {
     }),
   peachPlay: (track: Track) => request<PeachState>("/api/peach/play", { method: "POST", json: track }),
   peachEnqueue: (track: Track) => request<PeachState>("/api/peach/enqueue", { method: "POST", json: track }),
-  peachControl: (action, percent) => request<PeachState>("/api/peach/control", { method: "POST", json: { action, percent } }),
+  peachEnqueueNext: (track: Track) => request<PeachState>("/api/peach/enqueue-next", { method: "POST", json: track }),
+  peachControl: (action, value) =>
+    request<PeachState>("/api/peach/control", {
+      method: "POST",
+      json: action === "volume" ? { action, percent: value } : { action, index: value },
+    }),
 
   library: () => request<Library>("/api/library"),
   addFavorite: (t: Track) => request<{ favorites: Track[] }>(`/api/favorites/${t.id}`, { method: "PUT", json: t }),
@@ -88,6 +96,7 @@ export const api: MusikeApi = {
 /** What a media element plays for a track: here, the server's stream proxy. The Android backend resolves it on the phone. */
 const hostedPlayback = import.meta.env.VITE_HOSTED_PLAYBACK === "youtube";
 const radioPlayback = import.meta.env.VITE_PEACH_RADIO === "true";
+if (radioPlayback) document.documentElement.dataset.peachRadio = "1";
 
 export const streamSource = (id: string, kind: "audio" | "video", quality: "sd" | "hd"): string | Promise<string> =>
   hostedPlayback ? `youtube:${id}` : kind === "audio" ? `/api/stream/${id}/audio` : `/api/stream/${id}/video?q=${quality}`;

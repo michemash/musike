@@ -7,6 +7,7 @@ import { toast } from "./ui";
 interface LibraryState extends Library {
   status: "idle" | "loading" | "ready" | "error";
   load: () => Promise<void>;
+  refreshPlaylists: () => Promise<void>;
   isFavorite: (id: string) => boolean;
   toggleFavorite: (t: Track) => Promise<void>;
   addFavorites: (tracks: Track[]) => Promise<void>;
@@ -33,6 +34,15 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       set({ ...lib, status: "ready" });
     } catch {
       set({ status: "error" });
+    }
+  },
+
+  refreshPlaylists: async () => {
+    try {
+      const { playlists } = await api.library();
+      set({ playlists });
+    } catch {
+      // Keep the last good shared view during a brief network interruption.
     }
   },
 

@@ -162,15 +162,15 @@ export function SidePanel() {
   const togglePanel = useUi((s) => s.togglePanel);
   const t = useT();
   return (
-    <aside className="island hidden w-[360px] shrink-0 xl:flex" aria-label={t.nowPlaying.panel}>
-      <div className="island-core flex w-full flex-col overflow-hidden">
+    <aside className="island hidden h-full min-h-0 w-[360px] shrink-0 xl:flex" aria-label={t.nowPlaying.panel}>
+      <div className="island-core flex min-h-0 w-full flex-col overflow-hidden">
         <div className="flex h-16 items-center justify-between px-3">
           <PanelTabs tab={tab} onTab={openPanel} />
           <IconButton label={t.nowPlaying.closePanel} size="sm" onClick={() => togglePanel(tab)}>
             <XIcon size={18} />
           </IconButton>
         </div>
-        <div className="scroll-area flex-1 overflow-y-auto px-2">
+        <div className="scroll-area min-h-0 flex-1 overflow-y-auto overscroll-contain px-2">
           <PanelBody tab={tab} slot={SLOT.panel} />
         </div>
       </div>
@@ -208,14 +208,14 @@ export function PanelDrawer() {
             transition={{ type: "spring", stiffness: 380, damping: 38 }}
             className="island drawer-top absolute right-2 bottom-2 flex w-[380px] max-w-[calc(100vw-16px)]"
           >
-            <div className="island-core flex w-full flex-col overflow-hidden">
+            <div className="island-core flex min-h-0 w-full flex-col overflow-hidden">
               <div className="flex h-16 items-center justify-between px-3">
                 <PanelTabs tab={tab} onTab={openPanel} />
                 <IconButton label={t.common.close} size="sm" onClick={close}>
                   <XIcon size={18} />
                 </IconButton>
               </div>
-              <div className="scroll-area flex-1 overflow-y-auto px-2">
+              <div className="scroll-area min-h-0 flex-1 overflow-y-auto overscroll-contain px-2">
                 <PanelBody tab={tab} slot={SLOT.panel} />
               </div>
             </div>

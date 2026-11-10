@@ -1,4 +1,5 @@
 import { cn } from "../lib/format";
+import { capabilities } from "../lib/api";
 
 /** The Musike mark: three equalizer bars forming an M. */
 export function LogoMark({ className }: { className?: string }) {
@@ -17,7 +18,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1.5", className)}>
       <LogoMark className="size-7 text-accent-text" />
-      <span className="text-[17px] font-semibold tracking-tight">musike</span>
+      <span className="text-[17px] font-semibold tracking-tight">{capabilities.radioPlayback ? "Peach Radio" : "musike"}</span>
     </span>
   );
 }

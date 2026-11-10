@@ -15,6 +15,7 @@ import { MD, useMediaQuery } from "./hooks/useMediaQuery";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { getT } from "./i18n";
 import { capabilities } from "./lib/api";
+import { hasPeachAdminAccess } from "./lib/adminAccess";
 import { cn } from "./lib/format";
 import { legacyRedirect, NOW_PLAYING_HASH, paths } from "./lib/routes";
 import { usePlayer } from "./player/player";
@@ -41,6 +42,7 @@ export default function App() {
   const panelOpen = useUi((s) => s.panelOpen);
   const hasTrack = usePlayer((s) => s.queue.length > 0);
   const loadLibrary = useLibrary((s) => s.load);
+  const refreshPlaylists = useLibrary((s) => s.refreshPlaylists);
   const loadSystem = useSystem((s) => s.load);
   const main = useRef<HTMLElement>(null);
 
@@ -49,6 +51,17 @@ export default function App() {
   useEffect(() => {
     void loadLibrary();
   }, [loadLibrary]);
+
+  useEffect(() => {
+    if (!capabilities.radioPlayback) return;
+    const refresh = () => document.visibilityState !== "hidden" && void refreshPlaylists();
+    const timer = window.setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [refreshPlaylists]);
 
   useEffect(
     () =>
@@ -116,6 +129,18 @@ export default function App() {
     if (idx > 0) navigate(-1);
     else navigate({ hash: "" }, { replace: true });
   };
+
+  if (capabilities.radioPlayback && !hasPeachAdminAccess()) {
+    return (
+      <main className="grid h-dvh place-items-center bg-bg p-6 text-fg">
+        <section className="max-w-md rounded-[24px] bg-surface-2 p-8 text-center ring-1 ring-line">
+          <div className="mx-auto mb-5 grid size-14 place-items-center rounded-2xl bg-accent text-2xl font-bold text-accent-ink">P</div>
+          <h1 className="text-2xl font-semibold">Peach Radio</h1>
+          <p className="mt-3 text-sm leading-6 text-fg-2">Open this music workspace from the Peach Radio page in the admin console. Your administrator account needs Manage Peach Radio permission.</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <div className={cn("grain flex h-dvh flex-col bg-bg md:gap-2 md:p-2", desktop && "md:pt-0")}>

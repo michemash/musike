@@ -54,6 +54,25 @@
   --danger: #c4372a;
 }
 
+[data-peach-radio="1"] {
+  --bg: #120e0d;
+  --surface-1: #1d1513;
+  --surface-2: #271b18;
+  --surface-3: #34231f;
+  --surface-4: #493029;
+  --line: rgb(255 205 184 / 0.1);
+  --line-strong: rgb(255 205 184 / 0.18);
+  --fg: #fff4ef;
+  --fg-2: #c9aaa0;
+  --fg-3: #8e7169;
+  --accent: #f07850;
+  --accent-ink: #2b1714;
+  --accent-text: #ff9a73;
+  --accent-soft: rgb(240 120 80 / 0.14);
+  --highlight: rgb(255 180 145 / 0.07);
+  --scrim: rgb(18 10 8 / 0.76);
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface-1: var(--surface-1);

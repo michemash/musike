@@ -9,6 +9,7 @@ import { fileStorage } from "./libraryFile.js";
 import { findVideoFor, radio, search, suggestions } from "./search.js";
 import { proxyStream, serveFile } from "./stream.js";
 import { peachCommand, type PeachAction } from "./peachRadio.js";
+import { requirePeachAdmin } from "./adminToken.js";
 import { langOf, msg, tr } from "./i18n.js";
 import { presentJob, startJob, systemInfo, type Channel } from "./system.js";
 import { refreshTools, type Tools } from "./tools.js";
@@ -57,15 +58,29 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
 
   app.get("/api/health", async () => ({ ok: true }));
 
+  // Hosted Peach Radio keeps its queue and library behind the same admin-console grant.
+  app.addHook("preHandler", async (req) => {
+    if (config.musikeAdminSecret && /^\/api\/(?:peach|library|favorites|playlists|history)(?:\/|$)/.test(req.url)) {
+      requirePeachAdmin(req);
+    }
+  });
+
   // Shared Peach Radio: the browser never receives the station control token.
-  app.post("/api/peach/play", async (req) => peachCommand("play", library.sanitizeTrack(req.body)));
-  app.post("/api/peach/enqueue", async (req) => peachCommand("enqueue", library.sanitizeTrack(req.body)));
+  app.post("/api/peach/play", async (req) => {
+    return peachCommand("play", library.sanitizeTrack(req.body));
+  });
+  app.post("/api/peach/enqueue", async (req) => {
+    return peachCommand("enqueue", library.sanitizeTrack(req.body));
+  });
+  app.post("/api/peach/enqueue-next", async (req) => {
+    return peachCommand("enqueue-next", library.sanitizeTrack(req.body));
+  });
   app.post("/api/peach/control", async (req) => {
-    const { action, percent } = (req.body ?? {}) as { action?: PeachAction; percent?: number };
-    if (!action || !["pause", "resume", "skip", "stop", "state", "volume"].includes(action)) {
+    const { action, percent, index } = (req.body ?? {}) as { action?: PeachAction; percent?: number; index?: number };
+    if (!action || !["pause", "resume", "skip", "stop", "state", "volume", "remove", "clear", "jump"].includes(action)) {
       throw Object.assign(new Error("Unknown Peach Radio control."), { statusCode: 400 });
     }
-    return peachCommand(action, undefined, action === "volume" ? Number(percent) : undefined);
+    return peachCommand(action, undefined, action === "volume" ? Number(percent) : undefined, index === undefined ? undefined : Number(index));
   });
 
   // System: yt-dlp status and one-click update

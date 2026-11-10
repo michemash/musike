@@ -90,6 +90,7 @@ export const api: MusikeApi = {
     }, signal),
   peachPlay: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
   peachEnqueue: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
+  peachEnqueueNext: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
   peachControl: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
 
   library: () => call(() => library.getLibrary()),

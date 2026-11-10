@@ -27,6 +27,8 @@ export const config = {
   /** Private server-to-server control plane for the shared Peach Radio station. */
   peachRadioUrl: (process.env.PEACH_RADIO_URL ?? "").replace(/\/$/, ""),
   peachRadioToken: process.env.PEACH_RADIO_TOKEN ?? "",
+  /** Shared HMAC secret used by the admin console to grant short-lived radio access. */
+  musikeAdminSecret: process.env.MUSIKE_ADMIN_SECRET ?? "",
   /** HTTP for youtubei.js; the platform's own fetch here (the Android app passes its native one). */
   fetch: undefined as typeof fetch | undefined,
 };
