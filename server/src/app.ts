@@ -12,7 +12,7 @@ import { langOf, msg, tr } from "./i18n.js";
 import { presentJob, startJob, systemInfo, type Channel } from "./system.js";
 import { refreshTools, type Tools } from "./tools.js";
 import { HttpError, VIDEO_ID } from "./types.js";
-import { downloadHd, pruneCache, resolveStreams } from "./ytdlp.js";
+import { downloadAudio, downloadHd, pruneCache, resolveStreams } from "./ytdlp.js";
 
 function videoId(params: unknown): string {
   const id = (params as { id?: string }).id ?? "";
@@ -133,6 +133,20 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   app.get("/api/stream/:id/audio", (req, reply) => proxyStream(req, reply, videoId(req.params), "audio"));
+
+  app.post("/api/download/:id/prepare", async (req) => {
+    const { duration, title, artist } = req.query as { duration?: string; title?: string; artist?: string };
+    await downloadAudio(videoId(req.params), Number(duration), { title, artist });
+    return { ready: true };
+  });
+
+  app.get("/api/download/:id", async (req, reply) => {
+    const { title, artist, duration } = req.query as { title?: string; artist?: string; duration?: string };
+    const parts = [artist, title].filter((part): part is string => typeof part === "string" && !!part.trim()).map((part) => part.slice(0, 200));
+    const seconds = Number(duration);
+    const downloaded = await downloadAudio(videoId(req.params), seconds, { title, artist });
+    return serveFile(req, reply, downloaded.file, downloaded.mime, parts.join(" - "));
+  });
 
   app.get("/api/stream/:id/video", async (req, reply) => {
     const id = videoId(req.params);

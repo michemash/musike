@@ -4,6 +4,9 @@ interface DesktopBridge {
   setTheme: (theme: "dark" | "light") => void;
   /** Missing in desktop builds older than 1.2. */
   setLanguage?: (lang: string) => void;
+  getDownloadPath?: () => Promise<string>;
+  chooseDownloadPath?: () => Promise<string | null>;
+  onDownload?: (callback: (update: { state: "complete" | "failed"; filename: string }) => void) => () => void;
 }
 
 export const desktop = (window as Window & { musikeDesktop?: DesktopBridge }).musikeDesktop;

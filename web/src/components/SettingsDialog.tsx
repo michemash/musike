@@ -2,6 +2,7 @@ import {
   ArrowsClockwiseIcon,
   CheckCircleIcon,
   DownloadSimpleIcon,
+  FolderOpenIcon,
   MoonIcon,
   SunIcon,
   TranslateIcon,
@@ -10,6 +11,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LANGUAGES, useI18n, useT, type Lang } from "../i18n";
 import { capabilities, type Channel } from "../lib/api";
+import { desktop } from "../lib/desktop";
 import { cn } from "../lib/format";
 import { useSystem } from "../stores/system";
 import { useUi } from "../stores/ui";
@@ -81,6 +83,8 @@ export function SettingsDialog() {
   const setTheme = useUi((s) => s.setTheme);
   const { info, status, load, update } = useSystem();
   const [channel, setChannel] = useState<Channel>("stable");
+  const [downloadPath, setDownloadPath] = useState("");
+  const [choosingDownloadPath, setChoosingDownloadPath] = useState(false);
   const logBox = useRef<HTMLPreElement>(null);
   const t = useT();
   const lang = useI18n((s) => s.lang);
@@ -89,6 +93,21 @@ export function SettingsDialog() {
   useEffect(() => {
     if (open) void load();
   }, [open, load]);
+
+  useEffect(() => {
+    if (open && desktop?.getDownloadPath) void desktop.getDownloadPath().then(setDownloadPath);
+  }, [open]);
+
+  const chooseDownloadPath = async () => {
+    if (!desktop?.chooseDownloadPath) return;
+    setChoosingDownloadPath(true);
+    try {
+      const selected = await desktop.chooseDownloadPath();
+      if (selected) setDownloadPath(selected);
+    } finally {
+      setChoosingDownloadPath(false);
+    }
+  };
 
   useEffect(() => {
     if (info) setChannel(info.ytdlp.channel);
@@ -153,6 +172,35 @@ export function SettingsDialog() {
         </section>
 
         <LayoutSection />
+
+        {capabilities.downloads && (
+          <section className="flex flex-col gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium text-fg-3">
+              <DownloadSimpleIcon size={14} /> {t.settings.downloads}
+            </h3>
+            <div className="flex flex-col gap-3 rounded-[16px] bg-surface-1 p-4 ring-1 ring-line">
+              <p className="text-sm text-fg-2">{desktop?.chooseDownloadPath ? t.settings.downloadFolderBody : t.settings.browserDownloadFolderBody}</p>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  aria-label={t.settings.downloadFolder}
+                  value={desktop?.chooseDownloadPath ? downloadPath : t.settings.browserDownloadFolder}
+                  className="min-w-0 flex-1 rounded-xl bg-bg px-3 py-2.5 text-sm text-fg-2 ring-1 ring-line"
+                />
+                {desktop?.chooseDownloadPath && (
+                  <button
+                    type="button"
+                    disabled={choosingDownloadPath}
+                    onClick={() => void chooseDownloadPath()}
+                    className="flex shrink-0 items-center gap-2 rounded-full bg-surface-3 px-4 text-sm font-medium text-fg transition-colors hover:bg-surface-4 disabled:opacity-60"
+                  >
+                    <FolderOpenIcon size={18} /> {t.settings.chooseFolder}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <BackupSection />
 

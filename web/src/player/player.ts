@@ -7,6 +7,7 @@ import type { Track } from "../lib/types";
 import { useLibrary } from "../stores/library";
 import { openSettings } from "../stores/system";
 import { toast } from "../stores/ui";
+import { createYouTubeMediaElement } from "./youtubeMedia";
 
 export type Repeat = "off" | "all" | "one";
 /** A code translated where it is shown (so switching languages updates it), or a server error already in the right language. */
@@ -65,7 +66,7 @@ interface PlayerState {
 // On iOS this is the native player behind the same API (see lib/audio.ts).
 const audio = createAudio();
 
-export const videoEl = document.createElement("video");
+export const videoEl = capabilities.embeddedPlayback ? createYouTubeMediaElement() : document.createElement("video");
 videoEl.playsInline = true;
 videoEl.preload = "auto";
 videoEl.setAttribute("playsinline", "");
@@ -133,14 +134,18 @@ function lookupClip(track: Track): Promise<string | null> {
 }
 
 const needsClipLookup = (track: Track, preferVideo: boolean) =>
-  preferVideo && track.kind === "song" && !clipFor.has(track.id);
+  (capabilities.embeddedPlayback || preferVideo) && track.kind === "song" && !clipFor.has(track.id);
 
 export const usePlayer = create<PlayerState>((set, get) => {
   const kindFor = (track: Track): Kind =>
-    capabilities.video && get().preferVideo && (track.kind === "video" || !!clipFor.get(track.id)) ? "video" : "audio";
+    capabilities.embeddedPlayback
+      ? "video"
+      : capabilities.video && get().preferVideo && (track.kind === "video" || !!clipFor.get(track.id))
+        ? "video"
+        : "audio";
   /** The YouTube id to stream: the song itself, or its music video in Video mode. */
   const mediaIdFor = (track: Track, kind: Kind) =>
-    kind === "video" && track.kind !== "video" ? clipFor.get(track.id)! : track.id;
+    kind === "video" && track.kind !== "video" ? (clipFor.get(track.id) ?? track.id) : track.id;
   const noteFor = (track: Track) =>
     get().preferVideo && track.kind === "song" && clipFor.get(track.id) === null ? ("noClip" as const) : null;
   const activeMedia = (): HTMLMediaElement | null => (loaded ? mediaFor(loaded.kind) : null);
@@ -247,8 +252,12 @@ export const usePlayer = create<PlayerState>((set, get) => {
     // Warm up the next track (and, in Video mode, find and resolve its clip) so it starts quickly.
     const upcoming = s.queue[s.index + 1];
     if (!upcoming) return;
-    if (s.preferVideo) void lookupClip(upcoming).then((id) => api.prepare(id ?? upcoming.id).catch(() => {}));
-    else api.prepare(upcoming.id).catch(() => {});
+    if (capabilities.embeddedPlayback) {
+      if (upcoming.kind === "song") void lookupClip(upcoming);
+    } else {
+      if (s.preferVideo) void lookupClip(upcoming).then((id) => api.prepare(id ?? upcoming.id).catch(() => {}));
+      else api.prepare(upcoming.id).catch(() => {});
+    }
   }
 
   function onEnded() {
@@ -380,7 +389,7 @@ export const usePlayer = create<PlayerState>((set, get) => {
     shuffle: saved.shuffle ?? false,
     repeat: saved.repeat ?? "off",
     // Builds without video (Android) always play audio, whatever a backup or an old session says.
-    preferVideo: capabilities.video && (saved.preferVideo ?? false),
+    preferVideo: capabilities.embeddedPlayback || (capabilities.video && (saved.preferVideo ?? false)),
     quality: saved.quality ?? "sd",
     autoRadio: saved.autoRadio ?? true,
 

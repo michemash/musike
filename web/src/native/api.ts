@@ -116,6 +116,13 @@ export const api: MusikeApi = {
 /** On the phone, the media element plays YouTube's stream directly: resolved here, no proxy needed. */
 export const streamSource = (id: string): Promise<string> => resolveAudio(id).then((r) => r.url);
 
+/** Native downloads need a foreground service and storage UI; keep the row action hidden until that is available. */
+export function trackDownloadUrl(): string {
+  return "#";
+}
+
+export async function downloadTrack(): Promise<void> {}
+
 export async function explainStreamError(url: string): Promise<{ message: string }> {
   forgetUrl(url);
   return { message: navigator.onLine ? getT().player.streamFailed : getT().player.offline };
@@ -129,4 +136,4 @@ export async function saveFile(name: string, text: string) {
 
 export const systemMedia = media;
 
-export const capabilities = { video: false, engineSettings: false, retryOnError: true };
+export const capabilities = { video: false, engineSettings: false, retryOnError: true, downloads: false };

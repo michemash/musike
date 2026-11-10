@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, ipcMain, Menu, screen, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, type DownloadItem, type Event } from "electron";
 import type { RunningServer } from "../../server/src/app.js";
 import { backupLibraryOnUpdate } from "./backup.js";
 
@@ -57,17 +57,42 @@ type Lang = "en" | "pt-BR";
 const settingsFile = path.join(userData, "settings.json");
 const isLang = (v: unknown): v is Lang => v === "en" || v === "pt-BR";
 
-function readLang(): Lang {
-  try {
-    const { lang } = JSON.parse(readFileSync(settingsFile, "utf8")) as { lang?: unknown };
-    if (isLang(lang)) return lang;
-  } catch {
-    // first launch
-  }
-  return "en";
+interface DesktopSettings {
+  lang?: unknown;
+  downloadPath?: unknown;
 }
 
-let lang = readLang();
+function readSettings(): DesktopSettings {
+  try {
+    return JSON.parse(readFileSync(settingsFile, "utf8")) as DesktopSettings;
+  } catch {
+    // first launch
+    return {};
+  }
+}
+
+const savedSettings = readSettings();
+let lang: Lang = isLang(savedSettings.lang) ? savedSettings.lang : "en";
+let downloadPath = typeof savedSettings.downloadPath === "string" && path.isAbsolute(savedSettings.downloadPath)
+  ? savedSettings.downloadPath
+  : app.getPath("downloads");
+
+function saveSettings() {
+  try {
+    writeFileSync(settingsFile, JSON.stringify({ lang, downloadPath }));
+  } catch {
+    /* not critical: defaults are restored next launch */
+  }
+}
+
+function availableDownloadPath(folder: string, filename: string): string {
+  const safe = path.basename(filename);
+  let candidate = path.join(folder, safe);
+  const ext = path.extname(safe);
+  const base = path.basename(safe, ext);
+  for (let n = 1; existsSync(candidate); n++) candidate = path.join(folder, `${base} (${n})${ext}`);
+  return candidate;
+}
 
 function readWindowState(): WindowState {
   try {
@@ -138,6 +163,17 @@ function createMainWindow(url: string): BrowserWindow {
   });
   win.on("close", () => saveWindowState(win));
 
+  const downloadSession = win.webContents.session;
+  const onDownload = (_event: Event, item: DownloadItem) => {
+    const filename = path.basename(item.getFilename());
+    item.setSavePath(availableDownloadPath(downloadPath, filename));
+    item.once("done", (_event, state) => {
+      if (!win.isDestroyed()) win.webContents.send("musike:download", { state: state === "completed" ? "complete" : "failed", filename });
+    });
+  };
+  downloadSession.on("will-download", onDownload);
+  win.once("closed", () => downloadSession.removeListener("will-download", onDownload));
+
   // Links to YouTube etc. open in the user's browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url: target }) => {
     if (/^https?:\/\//.test(target)) void shell.openExternal(target);
@@ -193,11 +229,20 @@ ipcMain.on("musike:theme", (event, theme: "dark" | "light") => {
 ipcMain.on("musike:lang", (_event, next: unknown) => {
   if (!isLang(next) || next === lang) return;
   lang = next;
-  try {
-    writeFileSync(settingsFile, JSON.stringify({ lang }));
-  } catch {
-    /* not critical: the splash falls back to English */
-  }
+  saveSettings();
+});
+
+ipcMain.handle("musike:download-path", () => downloadPath);
+
+ipcMain.handle("musike:choose-download-path", async (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const options = { defaultPath: downloadPath, properties: ["openDirectory", "createDirectory"] as ("openDirectory" | "createDirectory")[] };
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+  const selected = result.filePaths[0];
+  if (result.canceled || !selected) return null;
+  downloadPath = selected;
+  saveSettings();
+  return downloadPath;
 });
 
 ipcMain.on("musike:retry", (event) => {
