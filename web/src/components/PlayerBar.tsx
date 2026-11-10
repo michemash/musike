@@ -1,11 +1,13 @@
 import { KeyboardIcon, QueueIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { cn } from "../lib/format";
 import { useT } from "../i18n";
+import { capabilities } from "../lib/api";
 import { selectCurrent, usePlayer, useStatusText } from "../player/player";
 import { useUi } from "../stores/ui";
 import { Artwork } from "./Artwork";
 import { FavoriteButton, ModeSwitch, Scrubber, Transport, Volume } from "./Controls";
 import { IconButton } from "./IconButton";
+import { TrackDownloadButton } from "./TrackDownloadButton";
 
 /** Desktop and tablet player: a floating island under the content. */
 export function PlayerBar() {
@@ -39,6 +41,7 @@ export function PlayerBar() {
                 </p>
               </div>
               <FavoriteButton track={track} size="sm" />
+              {capabilities.downloads && <TrackDownloadButton track={track} />}
             </>
           ) : (
             <p className="truncate pl-1 text-sm text-fg-3">{t.player.nothingPlaying}</p>

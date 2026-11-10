@@ -40,7 +40,12 @@ export async function fetchRemoteClients(key: "clients" | "ios" = "clients"): Pr
 }
 
 /** Tries each client in turn. Throws with YouTube's reason (or an empty message) when none of them has audio. */
-export async function directAudio(id: string, clients: string[], lang?: Lang): Promise<DirectAudio> {
+export async function directAudio(
+  id: string,
+  clients: string[],
+  lang?: Lang,
+  preference: "compatible" | "quality" = "compatible",
+): Promise<DirectAudio> {
   let reason = "";
   for (const client of clients) {
     try {
@@ -53,9 +58,11 @@ export async function directAudio(id: string, clients: string[], lang?: Lang): P
       const formats: any[] = [...(info.streaming_data?.adaptive_formats ?? []), ...(info.streaming_data?.formats ?? [])].filter(
         (f) => f.has_audio && !f.has_video && typeof f.url === "string",
       );
-      // AAC (m4a) first: it plays everywhere. Highest bitrate within the same kind.
-      const best = formats.sort(
-        (a, b) => Number(b.mime_type?.startsWith("audio/mp4")) - Number(a.mime_type?.startsWith("audio/mp4")) || (b.bitrate ?? 0) - (a.bitrate ?? 0),
+      // Playback prefers AAC because it works everywhere; saved files prefer the highest bitrate available.
+      const best = formats.sort((a, b) =>
+        preference === "quality"
+          ? (b.bitrate ?? 0) - (a.bitrate ?? 0)
+          : Number(b.mime_type?.startsWith("audio/mp4")) - Number(a.mime_type?.startsWith("audio/mp4")) || (b.bitrate ?? 0) - (a.bitrate ?? 0),
       )[0];
       if (!best) continue;
       const expire = Number(new URL(best.url).searchParams.get("expire")) * 1000;

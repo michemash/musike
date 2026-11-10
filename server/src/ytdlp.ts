@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { ensureComponent } from "./bootstrap.js";
 import { config } from "./config.js";
 import { DEFAULT_CLIENTS, directAudio, fetchRemoteClients } from "./directAudio.js";
@@ -79,6 +81,29 @@ async function run(args: string[], timeoutMs: number): Promise<string> {
   });
 }
 
+async function runFfmpeg(args: string[], timeoutMs: number): Promise<void> {
+  const { ffmpeg, env } = tools();
+  if (!ffmpeg) throw new HttpError(503, msg("toolMissing", { tool: "FFmpeg" }), "tool_missing");
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffmpeg, args, { windowsHide: true, env });
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new HttpError(504, msg("ytdlpTimeout")));
+    }, timeoutMs);
+    child.stderr.on("data", (d) => (stderr += d));
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(new HttpError(503, err.message, "tool_missing"));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(toHttpError(stderr));
+    });
+  });
+}
+
 // Failures that usually mean YouTube changed and yt-dlp needs an update.
 const OUTDATED = /nsig|signature|n challenge|JavaScript runtime|Unable to extract|Failed to extract|player response|Requested format is not available|HTTP Error 403/i;
 
@@ -152,6 +177,20 @@ async function clientsForDirect(): Promise<string[]> {
   return directClients ?? DEFAULT_CLIENTS;
 }
 
+/** Resolve audio without yt-dlp. This is also used when yt-dlp returns a URL that YouTube rejects later. */
+export async function resolveDirectStream(id: string): Promise<Resolved> {
+  const direct = await directAudio(id, await clientsForDirect());
+  const resolved: Resolved = {
+    id,
+    title: direct.title,
+    duration: direct.duration,
+    audio: { formatId: "direct", url: direct.url, headers: {}, mime: direct.mime },
+    expiresAt: direct.expiresAt - 10 * 60_000,
+  };
+  resolvedAt.set(id, resolved);
+  return resolved;
+}
+
 /**
  * Plan B for audio: YouTube's bot check stops yt-dlp on some connections (VPNs, shared networks), and a YouTube
  * change can break it until it's updated. Asking YouTube for the audio directly often still works. Video stays
@@ -161,14 +200,7 @@ async function resolveDirect(id: string, ytdlpError: unknown): Promise<Resolved>
   // Removed, private or age-restricted videos won't play any other way either.
   if (ytdlpError instanceof HttpError && (ytdlpError.status === 403 || ytdlpError.status === 404)) throw ytdlpError;
   try {
-    const direct = await directAudio(id, await clientsForDirect());
-    return {
-      id,
-      title: direct.title,
-      duration: direct.duration,
-      audio: { formatId: "direct", url: direct.url, headers: {}, mime: direct.mime },
-      expiresAt: direct.expiresAt - 10 * 60_000,
-    };
+    return await resolveDirectStream(id);
   } catch {
     throw ytdlpError; // yt-dlp's error says more, and may offer the update
   }
@@ -211,11 +243,26 @@ export function invalidate(id: string) {
 }
 
 const downloads = new Map<string, Promise<string>>();
+export interface DownloadedAudio {
+  file: string;
+  mime: "audio/mpeg";
+}
 
-/** Keeps the video cache under `config.cacheMaxBytes`, evicting least recently played files first. */
+const audioDownloads = new Map<string, Promise<DownloadedAudio>>();
+
+async function saveBestAudio(id: string, file: string): Promise<void> {
+  const best = await directAudio(id, await clientsForDirect(), undefined, "quality");
+  const response = await fetch(best.url);
+  if (!response.ok || !response.body) throw new HttpError(502, msg("streamRefused", { status: response.status }), "maybe_outdated");
+  await pipeline(Readable.fromWeb(response.body as any), createWriteStream(file));
+}
+
+/** Keeps downloaded media under `config.cacheMaxBytes`, evicting least recently used files first. */
 export async function pruneCache(): Promise<void> {
   if (!existsSync(config.cacheDir)) return;
-  const names = (await readdir(config.cacheDir)).filter((n) => n.endsWith(".720.mp4"));
+  const names = (await readdir(config.cacheDir)).filter(
+    (n) => n.endsWith(".720.mp4") || n.endsWith(".audio.webm") || n.endsWith(".audio.m4a") || n.endsWith(".audio.mp3"),
+  );
   const files = await Promise.all(
     names.map(async (n) => {
       const p = path.join(config.cacheDir, n);
@@ -274,6 +321,69 @@ export function downloadHd(id: string): Promise<string> {
     .finally(() => downloads.delete(id));
 
   downloads.set(id, job);
+  return job;
+}
+
+/** Downloads YouTube's best Opus audio, then finalizes and cuts the local file at the catalog duration. */
+export function downloadAudio(
+  id: string,
+  duration: number,
+  metadata: { title?: string; artist?: string } = {},
+): Promise<DownloadedAudio> {
+  const seconds = Number.isFinite(duration) && duration > 0 ? Math.min(Math.ceil(duration), 6 * 3600) : 0;
+  const key = `${id}:${seconds}`;
+  const file = path.join(config.cacheDir, `${id}.${seconds || "full"}.audio.mp3`);
+  if (existsSync(file)) {
+    const now = new Date();
+    utimes(file, now, now).catch(() => {});
+    return Promise.resolve({ file, mime: "audio/mpeg" });
+  }
+  const inflight = audioDownloads.get(key);
+  if (inflight) return inflight;
+
+  const source = path.join(config.cacheDir, `${id}.${seconds || "full"}.audio.source`);
+  const legacy = ["webm", "m4a"]
+    .map((ext) => path.join(config.cacheDir, `${id}.${seconds || "full"}.audio.${ext}`))
+    .find((candidate) => existsSync(candidate));
+  let tmp = "";
+  const job = (async (): Promise<DownloadedAudio> => {
+    try {
+      if (!tools().ffmpeg && config.binDir) await ensureComponent("ffmpeg");
+      await mkdir(config.cacheDir, { recursive: true });
+      if (!legacy) await saveBestAudio(id, source);
+      const input = legacy ?? source;
+      tmp = path.join(config.cacheDir, `${id}.${seconds || "full"}.audio.part.mp3`);
+      const tags = [
+        ...(metadata.title?.trim() ? ["-metadata", `title=${metadata.title.trim().slice(0, 200)}`] : []),
+        ...(metadata.artist?.trim() ? ["-metadata", `artist=${metadata.artist.trim().slice(0, 200)}`] : []),
+      ];
+      await runFfmpeg(
+        [
+          "-y", "-i", input,
+          "-map", "0:a:0", "-vn",
+          "-c:a", "libmp3lame", "-q:a", "2",
+          ...(seconds ? ["-t", String(seconds)] : []),
+          ...tags,
+          "-id3v2_version", "3",
+          tmp,
+        ],
+        DOWNLOAD_TIMEOUT_MS,
+      );
+      await rm(source, { force: true });
+      if (legacy) await rm(legacy, { force: true });
+      await rename(tmp, file);
+      pruneCache().catch(() => {});
+      return { file, mime: "audio/mpeg" };
+    } catch (err) {
+      await rm(source, { force: true });
+      if (tmp) await rm(tmp, { force: true });
+      throw err;
+    } finally {
+      audioDownloads.delete(key);
+    }
+  })();
+
+  audioDownloads.set(key, job);
   return job;
 }
 

@@ -2,10 +2,12 @@ import { BooksIcon, HouseIcon, MagnifyingGlassIcon } from "@phosphor-icons/react
 import { NavLink, useNavigate } from "react-router";
 import { cn } from "../lib/format";
 import { useT } from "../i18n";
+import { capabilities } from "../lib/api";
 import { NOW_PLAYING_HASH, paths } from "../lib/routes";
 import { selectCurrent, usePlayer, useStatusText } from "../player/player";
 import { Artwork } from "./Artwork";
 import { PlayPauseIcon } from "./Controls";
+import { TrackDownloadButton } from "./TrackDownloadButton";
 
 const tabs = [
   { to: paths.home, key: "home", Icon: HouseIcon, end: true },
@@ -83,6 +85,7 @@ export function MiniPlayer() {
               </span>
             </span>
           </button>
+          {capabilities.downloads && <TrackDownloadButton track={track} size="md" />}
           <button
             type="button"
             onClick={toggle}

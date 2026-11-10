@@ -82,8 +82,26 @@ export const api: MusikeApi = {
 };
 
 /** What a media element plays for a track: here, the server's stream proxy. The Android backend resolves it on the phone. */
+const hostedPlayback = import.meta.env.VITE_HOSTED_PLAYBACK === "youtube";
+
 export const streamSource = (id: string, kind: "audio" | "video", quality: "sd" | "hd"): string | Promise<string> =>
-  kind === "audio" ? `/api/stream/${id}/audio` : `/api/stream/${id}/video?q=${quality}`;
+  hostedPlayback ? `youtube:${id}` : kind === "audio" ? `/api/stream/${id}/audio` : `/api/stream/${id}/video?q=${quality}`;
+
+/** A browser/desktop download that streams the track straight to a file. */
+export function trackDownloadUrl(track: Track): string {
+  const query = new URLSearchParams({ title: track.title, artist: track.artist, duration: String(track.duration || "") });
+  return `/api/download/${track.id}?${query}`;
+}
+
+/** Prepares the finalized high-quality file, then starts a browser/desktop download once it can respond immediately. */
+export async function downloadTrack(track: Track): Promise<void> {
+  const query = new URLSearchParams({ title: track.title, artist: track.artist, duration: String(track.duration || "") });
+  await request<{ ready: boolean }>(`/api/download/${track.id}/prepare?${query}`, { method: "POST" });
+  const a = Object.assign(document.createElement("a"), { href: trackDownloadUrl(track), download: "" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 /** Saves a text file the way this platform does it: a browser download (the desktop app shows "Save as"). */
 export async function saveFile(name: string, text: string) {
@@ -99,7 +117,13 @@ export async function saveFile(name: string, text: string) {
 export const systemMedia: SystemMedia | null = null;
 
 /** What this build can do. The Android build has no video yet, no yt-dlp to manage, and retries expired streams. */
-export const capabilities = { video: true, engineSettings: true, retryOnError: false };
+export const capabilities = {
+  video: !hostedPlayback,
+  embeddedPlayback: hostedPlayback,
+  engineSettings: !hostedPlayback,
+  retryOnError: false,
+  downloads: !hostedPlayback,
+};
 
 /** Media elements hide the HTTP error body; fetch it to show the real reason. */
 export async function explainStreamError(url: string): Promise<{ message: string; code?: ErrorCode }> {

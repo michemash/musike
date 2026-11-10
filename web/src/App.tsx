@@ -50,6 +50,18 @@ export default function App() {
     void loadLibrary();
   }, [loadLibrary]);
 
+  useEffect(
+    () =>
+      desktop?.onDownload?.((update) => {
+        const t = getT();
+        toast(
+          update.state === "complete" ? t.toasts.downloadComplete(update.filename) : t.toasts.downloadFailed(update.filename),
+          update.state === "failed" ? "error" : "info",
+        );
+      }),
+    [],
+  );
+
   // Check yt-dlp shortly after start and say so once if something needs doing (not on Android: no yt-dlp there).
   useEffect(() => {
     if (!capabilities.engineSettings) return;

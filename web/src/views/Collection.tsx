@@ -1,4 +1,14 @@
-import { DotsThreeIcon, MagnifyingGlassIcon, PauseIcon, PencilSimpleIcon, PlayIcon, ShuffleIcon, TrashIcon } from "@phosphor-icons/react";
+import {
+  ArrowsClockwiseIcon,
+  DotsThreeIcon,
+  DownloadSimpleIcon,
+  MagnifyingGlassIcon,
+  PauseIcon,
+  PencilSimpleIcon,
+  PlayIcon,
+  ShuffleIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Cover, type CoverKind } from "../components/Cover";
@@ -8,11 +18,14 @@ import { Modal } from "../components/Modal";
 import { EmptyState, PageHeader } from "../components/Page";
 import { TrackList } from "../components/TrackList";
 import { useT } from "../i18n";
+import { capabilities, downloadTrack } from "../lib/api";
+import { desktop } from "../lib/desktop";
 import { shuffled } from "../lib/format";
 import { paths } from "../lib/routes";
 import type { Track } from "../lib/types";
 import { usePlayer } from "../player/player";
 import { useLibrary } from "../stores/library";
+import { toast } from "../stores/ui";
 
 interface Props {
   kind: CoverKind;
@@ -30,6 +43,7 @@ export default function Collection({ kind }: Props) {
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
   const t = useT();
 
   const playlist = kind === "playlist" ? lib.playlists.find((p) => p.id === id) : undefined;
@@ -61,6 +75,37 @@ export default function Collection({ kind }: Props) {
   // The queue holds exactly these tracks, so this collection is the current playback context.
   const isThisPlaying = tracks.length > 0 && queue.length === tracks.length && queue.every((t) => tracks.some((x) => x.id === t.id));
   const playing = isThisPlaying && (status === "playing" || status === "loading");
+
+  const downloadAll = async () => {
+    if (!playlist || !tracks.length || downloadProgress) return;
+    try {
+      if (desktop?.chooseDownloadPath && !(await desktop.chooseDownloadPath())) return;
+    } catch {
+      toast(t.toasts.playlistDownloadFailed(playlist.name), "error");
+      return;
+    }
+
+    const total = tracks.length;
+    let done = 0;
+    let failed = 0;
+    setDownloadProgress({ done, total });
+    toast(t.toasts.playlistDownloadStarted(playlist.name, total));
+
+    for (const track of tracks) {
+      try {
+        await downloadTrack(track);
+      } catch {
+        failed += 1;
+      } finally {
+        done += 1;
+        setDownloadProgress({ done, total });
+      }
+    }
+
+    setDownloadProgress(null);
+    if (failed) toast(t.toasts.playlistDownloadPartial(playlist.name, total - failed, failed), "error");
+    else toast(t.toasts.playlistDownloadQueued(playlist.name, total));
+  };
 
   return (
     <div className="pb-8">
@@ -106,6 +151,23 @@ export default function Collection({ kind }: Props) {
         >
           <ShuffleIcon size={24} />
         </IconButton>
+        {kind === "playlist" && capabilities.downloads && (
+          <div className="flex items-center gap-1">
+            <IconButton
+              label={downloadProgress ? t.collection.downloadProgress(downloadProgress.done, downloadProgress.total) : t.collection.downloadPlaylist}
+              size="lg"
+              disabled={!tracks.length || !!downloadProgress}
+              onClick={() => void downloadAll()}
+            >
+              {downloadProgress ? <ArrowsClockwiseIcon size={22} className="animate-spin" /> : <DownloadSimpleIcon size={23} />}
+            </IconButton>
+            {downloadProgress && (
+              <span className="min-w-10 font-mono text-xs text-fg-2 tabular-nums" aria-hidden="true">
+                {downloadProgress.done}/{downloadProgress.total}
+              </span>
+            )}
+          </div>
+        )}
         {kind === "playlist" && (
           <IconButton label={t.collection.more} size="lg" onClick={() => setMoreOpen(true)}>
             <DotsThreeIcon size={26} weight="bold" />

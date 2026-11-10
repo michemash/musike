@@ -1,6 +1,7 @@
 import { ClockIcon, DotsThreeIcon, HeartIcon, VideoCameraIcon } from "@phosphor-icons/react";
 import { memo, type MouseEvent } from "react";
 import { useT } from "../i18n";
+import { capabilities } from "../lib/api";
 import { cn, formatTime } from "../lib/format";
 import type { Track } from "../lib/types";
 import { selectCurrent, usePlayer } from "../player/player";
@@ -9,6 +10,7 @@ import { useLibrary } from "../stores/library";
 import { useUi } from "../stores/ui";
 import { Artwork } from "./Artwork";
 import { Equalizer } from "./Brand";
+import { TrackDownloadButton } from "./TrackDownloadButton";
 
 interface RowProps {
   track: Track;
@@ -40,8 +42,8 @@ const TrackRow = memo(function TrackRow({ track, position, onPlay, playlistId, s
       className={cn(
         "group relative grid items-center gap-3 rounded-xl px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2 md:px-3",
         showAlbum
-          ? "grid-cols-[auto_1fr_auto] md:grid-cols-[28px_auto_1fr_auto_auto] lg:grid-cols-[28px_auto_minmax(0,1.4fr)_minmax(0,1fr)_auto_auto]"
-          : "grid-cols-[auto_1fr_auto] md:grid-cols-[28px_auto_1fr_auto_auto]",
+          ? "grid-cols-[auto_1fr_auto_auto] md:grid-cols-[28px_auto_1fr_auto_auto] lg:grid-cols-[28px_auto_minmax(0,1.4fr)_minmax(0,1fr)_auto_auto]"
+          : "grid-cols-[auto_1fr_auto_auto] md:grid-cols-[28px_auto_1fr_auto_auto]",
       )}
     >
       <button
@@ -89,10 +91,15 @@ const TrackRow = memo(function TrackRow({ track, position, onPlay, playlistId, s
         >
           <HeartIcon size={17} weight={isFavorite ? "fill" : "regular"} />
         </button>
+        {capabilities.downloads && <TrackDownloadButton track={track} hoverOnly />}
         <span className="pointer-events-none w-11 text-right font-mono text-[13px] text-fg-3 tabular-nums">
           {track.duration ? formatTime(track.duration) : ""}
         </span>
       </div>
+
+      {capabilities.downloads && (
+        <TrackDownloadButton track={track} size="md" className="md:hidden" />
+      )}
 
       <button
         type="button"
@@ -136,7 +143,7 @@ export function TrackList({ tracks, context, playlistId, showAlbum: albumWanted 
           <span />
           <span>{t.trackList.title}</span>
           {showAlbum && <span className="hidden lg:block">{t.trackList.album}</span>}
-          <span className="flex w-[84px] justify-end pr-0.5">
+          <span className="flex w-[116px] justify-end pr-0.5">
             <ClockIcon size={15} aria-label={t.trackList.duration} />
           </span>
           <span className="w-9" />
