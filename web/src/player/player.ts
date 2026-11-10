@@ -169,7 +169,8 @@ export const usePlayer = create<PlayerState>((set, get) => {
       set({ index, mediaKind: "audio", status: "loading", statusText: null, videoNote: null, position: 0, duration: track.duration, buffered: 0 });
       setMetadata(track);
       const mine = token;
-      void api.peachPlay(track).then(
+      const stationTrack = track.kind === "song" ? api.videoFor(track).then((video) => video ?? track) : Promise.resolve(track);
+      void stationTrack.then((resolved) => api.peachPlay(resolved)).then(
         () => {
           if (mine !== token) return;
           set({ status: "playing", statusText: null });
