@@ -88,6 +88,9 @@ export const api: MusikeApi = {
       const r = await resolveAudio(id);
       return { id, title: r.title, duration: r.duration, hasSdVideo: false };
     }, signal),
+  peachPlay: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
+  peachEnqueue: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
+  peachControl: async () => { throw new ApiError(501, "Peach Radio is only available in the hosted web app."); },
 
   library: () => call(() => library.getLibrary()),
   addFavorite: (t) => call(async () => ({ favorites: await library.addFavorite(library.sanitizeTrack(t)) })),

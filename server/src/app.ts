@@ -8,6 +8,7 @@ import * as library from "./library.js";
 import { fileStorage } from "./libraryFile.js";
 import { findVideoFor, radio, search, suggestions } from "./search.js";
 import { proxyStream, serveFile } from "./stream.js";
+import { peachCommand, type PeachAction } from "./peachRadio.js";
 import { langOf, msg, tr } from "./i18n.js";
 import { presentJob, startJob, systemInfo, type Channel } from "./system.js";
 import { refreshTools, type Tools } from "./tools.js";
@@ -55,6 +56,17 @@ export async function startServer(opts: StartOptions = {}): Promise<RunningServe
   });
 
   app.get("/api/health", async () => ({ ok: true }));
+
+  // Shared Peach Radio: the browser never receives the station control token.
+  app.post("/api/peach/play", async (req) => peachCommand("play", library.sanitizeTrack(req.body)));
+  app.post("/api/peach/enqueue", async (req) => peachCommand("enqueue", library.sanitizeTrack(req.body)));
+  app.post("/api/peach/control", async (req) => {
+    const { action, percent } = (req.body ?? {}) as { action?: PeachAction; percent?: number };
+    if (!action || !["pause", "resume", "skip", "stop", "state", "volume"].includes(action)) {
+      throw Object.assign(new Error("Unknown Peach Radio control."), { statusCode: 400 });
+    }
+    return peachCommand(action, undefined, action === "volume" ? Number(percent) : undefined);
+  });
 
   // System: yt-dlp status and one-click update
 
