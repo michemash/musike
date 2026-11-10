@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @musike/web build:hosted",
+  "outputDirectory": "web/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://musike-companion-api-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
