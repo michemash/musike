@@ -72,6 +72,16 @@ export function PlayerBar() {
             <SidebarSimpleIcon size={18} mirrored />
           </IconButton>
           <Volume className="max-lg:hidden" />
+          {capabilities.radioPlayback && (
+            <a
+              href="https://peach-radio.up.railway.app/live"
+              target="_blank"
+              rel="noreferrer"
+              className="ml-1 inline-flex h-9 items-center rounded-full bg-accent px-3 text-xs font-semibold text-accent-ink transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Listen now ↗
+            </a>
+          )}
           <IconButton label={t.player.shortcuts} size="sm" onClick={() => setShortcutsOpen(true)} className="max-xl:hidden">
             <KeyboardIcon size={18} />
           </IconButton>
