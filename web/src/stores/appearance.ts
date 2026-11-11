@@ -71,7 +71,7 @@ function apply(a: Appearance) {
   } else {
     style?.remove();
   }
-  if (a.compactSidebar) root.dataset.rail = "compact";
+  if (root.dataset.adminEmbed === "1" || a.compactSidebar) root.dataset.rail = "compact";
   else delete root.dataset.rail;
   if (a.texture) delete root.dataset.texture;
   else root.dataset.texture = "off";
