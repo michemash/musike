@@ -96,7 +96,13 @@ export const api: MusikeApi = {
 /** What a media element plays for a track: here, the server's stream proxy. The Android backend resolves it on the phone. */
 const hostedPlayback = import.meta.env.VITE_HOSTED_PLAYBACK === "youtube";
 const radioPlayback = import.meta.env.VITE_PEACH_RADIO === "true";
-if (radioPlayback) document.documentElement.dataset.peachRadio = "1";
+if (radioPlayback) {
+  document.documentElement.dataset.peachRadio = "1";
+  if (peachAdminToken) {
+    document.documentElement.dataset.adminEmbed = "1";
+    document.documentElement.dataset.rail = "compact";
+  }
+}
 
 export const streamSource = (id: string, kind: "audio" | "video", quality: "sd" | "hd"): string | Promise<string> =>
   hostedPlayback ? `youtube:${id}` : kind === "audio" ? `/api/stream/${id}/audio` : `/api/stream/${id}/video?q=${quality}`;

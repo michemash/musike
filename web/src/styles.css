@@ -73,6 +73,17 @@
   --scrim: rgb(18 10 8 / 0.76);
 }
 
+/* The admin console already supplies the outer app shell. Keep Musike's useful navigation,
+   but make it a compact tool rail and remove the standalone app's second frame. */
+[data-admin-embed="1"] .grain { gap: 0 !important; padding: 0 !important; }
+[data-admin-embed="1"] .grain > div { gap: 0 !important; }
+[data-admin-embed="1"] .island { padding: 0; border-radius: 0; }
+[data-admin-embed="1"] .island-core,
+[data-admin-embed="1"] main { border-radius: 0 !important; }
+[data-admin-embed="1"] aside.island:first-child { width: 78px !important; }
+[data-admin-embed="1"] aside.island:last-child { border-left-color: var(--line-strong); }
+[data-admin-embed="1"] .grain > .island { border-top-color: var(--line-strong); }
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface-1: var(--surface-1);
