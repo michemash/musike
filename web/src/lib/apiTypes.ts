@@ -60,6 +60,7 @@ export interface PeachState {
   current: { id: string; title: string; artist: string; duration: number; thumb: string } | null;
   queue: Array<{ id: string; title: string; artist: string; duration: number; thumb: string }>;
   paused: boolean;
+  position: number;
   volume: number;
   publicUrl: string;
   activeSource?: string;

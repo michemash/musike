@@ -653,14 +653,13 @@ function applyPeachState(state: PeachState) {
   const previous = usePlayer.getState();
   const items = state.current ? [state.current, ...state.queue] : state.queue;
   const queue = items.map((item) => peachTrack(item, previous.queue));
-  const currentChanged = (state.current?.id ?? null) !== (previous.queue[previous.index]?.id ?? null);
   usePlayer.setState({
     queue,
     original: null,
     index: 0,
     status: state.current ? (state.paused ? "paused" : "playing") : "idle",
     statusText: null,
-    position: currentChanged ? 0 : previous.position,
+    position: Math.max(0, state.position ?? 0),
     duration: state.current?.duration ?? 0,
     buffered: 0,
     volume: state.volume,
@@ -676,6 +675,11 @@ if (capabilities.radioPlayback) {
   };
   refreshSharedQueue();
   setInterval(refreshSharedQueue, 2500);
+  setInterval(() => {
+    const state = usePlayer.getState();
+    if (state.status !== "playing" || !state.queue[state.index]) return;
+    usePlayer.setState({ position: Math.min(state.duration || Number.POSITIVE_INFINITY, state.position + 0.25) });
+  }, 250);
   document.addEventListener("visibilitychange", refreshSharedQueue);
 }
 
